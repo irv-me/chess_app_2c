@@ -1,3 +1,4 @@
+import "package:chess_app_2c/components/dead_piece.dart";
 import "package:chess_app_2c/components/piece.dart";
 import "package:chess_app_2c/components/square.dart";
 import "package:chess_app_2c/values/colors.dart";
@@ -30,6 +31,20 @@ class _GameBoardState extends State<GameBoard> {
 
   //a list of valid moves for the currently selected piece
   List<List<int>> validMoves = [];
+
+  //a list of white pieces that have been taken by the black player
+  List<ChessPiece> whitePiecesTaken = [];
+
+  //a list of black pieces that have been taken by the white player
+  List<ChessPiece> blackPiecesTaken = [];
+
+  //a booleon to indicate whos turn it is
+  bool isWhiteTurn = true;
+
+  //initial position of kings
+  List<int> whiteKingPosition = [7, 4];
+  List<int> blackKingPosition = [0, 4];
+  bool checkStatus = false;
 
   @override
   void initState() {
@@ -134,31 +149,42 @@ class _GameBoardState extends State<GameBoard> {
     board = newBoard;
   }
 
-  //user selected piece
+  //USER SELECTED PIECE
   void pieceSelected(int row, int col) {
     setState(() {
-      //selected a piece if there is a piece in that position
-      if (board[row][col] != null) {
+      //no piece has been selected yet, this is the first selection
+      if (selectedPiece == null && board[row][col] != null) {
+        if (board[row][col]!.isWhite == isWhiteTurn) {
+          selectedPiece = board[row][col];
+          selectedRow = row;
+          selectedCol = col;
+        }
+      }
+
+      //there is a piece already selected, user is selecting another of their pieces
+      else if (board[row][col] != null &&
+          board[row][col]!.isWhite == selectedPiece!.isWhite) {
         selectedPiece = board[row][col];
         selectedRow = row;
         selectedCol = col;
       }
 
       //if there is a piece selected and user taps on a square that is a valid move, move there
-      else if (selectedPiece != null && validMoves.any((element) => element[0] == row && element[1] == col)) {
+      else if (selectedPiece != null &&
+          validMoves.any((element) => element[0] == row && element[1] == col)) {
         movePiece(row, col);
       }
 
       //If a piece is selected, calculate it's valid moves
       validMoves =
-          calculatedRawValidMoves(selectedRow, selectedCol, selectedPiece);
+          calculatedRealValidMoves(selectedRow, selectedCol, selectedPiece, true);
     });
   }
 
   // CALCULATE RAW VALID MOVES
   List<List<int>> calculatedRawValidMoves(int row, int col, ChessPiece? piece) {
     List<List<int>> candidateMoves = [];
-    
+
     if (piece == null) {
       return [];
     }
@@ -197,6 +223,7 @@ class _GameBoardState extends State<GameBoard> {
 
         //TODO pawn can "En passant" allows a pawn to capture an adjacent enemy pawn that has just moved two squares forward, as if it had only moved one square. this can only be done the turn after
 
+        //TODO pawns can promote to any other piece when they reach the other side of the board
 
         break;
       case ChessPieceType.rook:
@@ -314,7 +341,7 @@ class _GameBoardState extends State<GameBoard> {
         }
         break;
       case ChessPieceType.king:
-      //all directions 1 step
+        //all directions 1 step
         var directions = [
           [-1, 0], //up
           [1, 0], //down
@@ -339,19 +366,70 @@ class _GameBoardState extends State<GameBoard> {
           }
           candidateMoves.add([newRow, newCol]);
         }
-      //TODO castling
-      
+        //TODO castling
+
         break;
     }
 
     return candidateMoves;
   }
 
+  // CALCULATE REAL VALID MOVES
+  List<List<int>> calculatedRealValidMoves(
+      int row, int col, ChessPiece? piece, bool checkSimulation) {
+    List<List<int>> realValidMoves = [];
+    List<List<int>> candidateMoves = calculatedRawValidMoves(row, col, piece);
+
+    //after generating all candidate moves, filter out any that would result in a check
+    if (checkSimulation) {
+      for (var move in candidateMoves) {
+        int endRow = move[0];
+        int endCol = move[1];
+
+        //this will simulate the future move to see if its
+        if (simulatedMoveIsSafe(piece!, row, col, endRow, endCol)) {
+          realValidMoves.add(move);
+        }
+      }
+    } else {
+      realValidMoves = candidateMoves;
+    }
+    return realValidMoves;
+  }
+
   // MOVE PIECE
   void movePiece(int newRow, int newCol) {
+    //if the new spot has an enemy piece
+    if (board[newRow][newCol] != null) {
+      //add the captured piece to the appropiate list
+      var capturedPiece = board[newRow][newCol];
+      if (capturedPiece!.isWhite) {
+        whitePiecesTaken.add(capturedPiece);
+      } else {
+        blackPiecesTaken.add(capturedPiece);
+      }
+    }
+
+    //check if the piece being moves is a king
+    if (selectedPiece!.type == ChessPieceType.king) {
+      //update the king's position
+      if (selectedPiece!.isWhite) {
+        whiteKingPosition = [newRow, newCol];
+      } else {
+        blackKingPosition = [newRow, newCol];
+      }
+    }
+
     //move the piece to the new position and clear the old spot
     board[newRow][newCol] = selectedPiece;
     board[selectedRow][selectedCol] = null;
+
+    //see if any kings are under attack
+    if (isKingInCheck(!isWhiteTurn)) {
+      checkStatus = true;
+    } else {
+      checkStatus = false;
+    }
 
     //clear selection
     setState(() {
@@ -360,41 +438,153 @@ class _GameBoardState extends State<GameBoard> {
       selectedCol = -1;
       validMoves = [];
     });
+
+    //change turns
+    isWhiteTurn = !isWhiteTurn;
   }
+
+  //IS KING IN CHECK?
+  bool isKingInCheck(bool isWhiteKing) {
+    //get king pos
+    List<int> kingPosition =
+        isWhiteKing ? whiteKingPosition : blackKingPosition;
+
+    //check if any enemy piece can attack the king
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 8; j++) {
+        //skipcempty squares and pieces of the same color as the king
+        if (board[i][j] == null || board[i][j]!.isWhite == isWhiteKing) {
+          continue;
+        }
+        List<List<int>> pieceValidMoves =
+            calculatedRealValidMoves(i, j, board[i][j], false);
+        //check if the king's position is in the valid moves of the enemy piece
+        if (pieceValidMoves.any((move) =>
+            move[0] == kingPosition[0] && move[1] == kingPosition[1])) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  //SIMULATED A FUTURE MOVE TO SEE IF SAFE
+  bool simulatedMoveIsSafe(
+      ChessPiece piece, int startRow, int startCol, int endRow, int endCol) {
+    //save the current board state
+    ChessPiece? originalDestinationPiece = board[endRow][endCol];
+
+    //if the piece is the king, save its current position and update the next one
+    List<int>? originalKingPosition;
+    if (piece.type == ChessPieceType.king) {
+      originalKingPosition =
+          piece.isWhite ? whiteKingPosition : blackKingPosition;
+
+      //update the king position
+      if (piece.isWhite) {
+        whiteKingPosition = [endRow, endCol];
+      } else {
+        blackKingPosition = [endRow, endCol];
+      }
+    }
+    //simulate the move
+    board[endRow][endCol] = piece;
+    board[startRow][startCol] = null;
+
+    //is the king in check after the move?
+    bool kingInCheck = isKingInCheck(piece.isWhite);
+
+    //restore to original board state
+    board[endRow][endCol] = originalDestinationPiece;
+    board[startRow][startCol] = piece;
+    //if the piece was the king restore it  original position
+
+    if (piece.type == ChessPieceType.king) {
+      if (piece.isWhite) {
+        whiteKingPosition = originalKingPosition!;
+      } else {
+        blackKingPosition = originalKingPosition!;
+      }
+    }
+    //return true if the king is not in check
+    return !kingInCheck;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
         backgroundColor: blackSquarecolor,
-        body: GridView.builder(
-          itemCount: 64,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 8),
-          itemBuilder: (context, index) {
-            //get the row and the col of this square
-            int row = index ~/ 8;
-            int col = index % 8;
+        body: Column(
+          children: [
+            //WHITE PIECES TAKEN
+            Expanded(
+                child: GridView.builder(
+              itemCount: whitePiecesTaken.length,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 8),
+              itemBuilder: (context, index) => DeadPiece(
+                imagePath: whitePiecesTaken[index].imagePath,
+                isWhite: true,
+              ),
+            )),
+            //GAME STATUS
+            checkStatus
+                ? Image.asset(
+                    'assets/images/check.png',
+                    color: whitePiececolor,
+                  )
+                : Container(),
 
-            //check if the square is selected
-            bool isSelected = selectedRow == row && selectedCol == col;
+            //CHESS BOARD
+            Expanded(
+              flex: 3,
+              child: GridView.builder(
+                itemCount: 64,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 8),
+                itemBuilder: (context, index) {
+                  //get the row and the col of this square
+                  int row = index ~/ 8;
+                  int col = index % 8;
 
-            //check if the square is valid
-            bool isValidMove = false;
-            for (var position in validMoves) {
-              //compare row and col
-              if (position[0] == row && position[1] == col) {
-                isValidMove = true;
-              }
-            }
+                  //check if the square is selected
+                  bool isSelected = selectedRow == row && selectedCol == col;
 
-            return Square(
-              isWhite: isWhite(index),
-              piece: board[row][col],
-              isSelected: isSelected,
-              isValidMove: isValidMove,
-              onTap: () => pieceSelected(row, col),
-            );
-          },
+                  //check if the square is valid
+                  bool isValidMove = false;
+                  for (var position in validMoves) {
+                    //compare row and col
+                    if (position[0] == row && position[1] == col) {
+                      isValidMove = true;
+                    }
+                  }
+
+                  return Square(
+                    isWhite: isWhite(index),
+                    piece: board[row][col],
+                    isSelected: isSelected,
+                    isValidMove: isValidMove,
+                    onTap: () => pieceSelected(row, col),
+                  );
+                },
+              ),
+            ),
+
+            //BLACK PIECES TAKEN
+            Expanded(
+                child: GridView.builder(
+              itemCount: blackPiecesTaken.length,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 8),
+              itemBuilder: (context, index) => DeadPiece(
+                imagePath: blackPiecesTaken[index].imagePath,
+                isWhite: false,
+              ),
+            )),
+          ],
         ));
   }
 }
