@@ -176,8 +176,8 @@ class _GameBoardState extends State<GameBoard> {
       }
 
       //If a piece is selected, calculate it's valid moves
-      validMoves =
-          calculatedRealValidMoves(selectedRow, selectedCol, selectedPiece, true);
+      validMoves = calculatedRealValidMoves(
+          selectedRow, selectedCol, selectedPiece, true);
     });
   }
 
@@ -222,8 +222,18 @@ class _GameBoardState extends State<GameBoard> {
         }
 
         //TODO pawn can "En passant" allows a pawn to capture an adjacent enemy pawn that has just moved two squares forward, as if it had only moved one square. this can only be done the turn after
-
-        //TODO pawns can promote to any other piece when they reach the other side of the board
+        if (lastDoubleMovePawnPosition != null) {
+        int lastRow = lastDoubleMovePawnPosition![0];
+        int lastCol = lastDoubleMovePawnPosition![1];
+        if ((row == lastRow) && (col - 1 == lastCol || col + 1 == lastCol)) {
+          if (board[lastRow][lastCol]!.type == ChessPieceType.pawn &&
+              board[lastRow][lastCol]!.isWhite != piece.isWhite) {
+            candidateMoves.add([row + direction, lastCol]);
+          }
+        }
+      }
+        //pawns can promote to any other piece when they reach the other side of the board
+        //this is handled in movePiece function
 
         break;
       case ChessPieceType.rook:
@@ -399,6 +409,12 @@ class _GameBoardState extends State<GameBoard> {
 
   // MOVE PIECE
   void movePiece(int newRow, int newCol) {
+    //CLEAR THE LAST DOUBLE MOVED PAWN POSITION
+    if (!pawnDoubleMoved) {
+      lastDoubleMovePawnPosition = null;
+      }
+      pawnDoubleMoved = false;
+    
     //if the new spot has an enemy piece
     if (board[newRow][newCol] != null) {
       //add the captured piece to the appropiate list
@@ -408,7 +424,23 @@ class _GameBoardState extends State<GameBoard> {
       } else {
         blackPiecesTaken.add(capturedPiece);
       }
+      } else if (selectedPiece!.type == ChessPieceType.pawn && lastDoubleMovePawnPosition != null) {
+    // Handle en passant capture
+    int lastRow = lastDoubleMovePawnPosition![0];
+    int lastCol = lastDoubleMovePawnPosition![1];
+    if (newCol == lastCol && (newRow - lastRow).abs() == 1) {
+      var capturedPiece = board[lastRow][lastCol];
+      if (capturedPiece!.isWhite) {
+        whitePiecesTaken.add(capturedPiece);
+      } else {
+        blackPiecesTaken.add(capturedPiece);
+      }
+      board[lastRow][lastCol] = null;
     }
+  }
+
+    
+
 
     //check if the piece being moves is a king
     if (selectedPiece!.type == ChessPieceType.king) {
@@ -424,6 +456,17 @@ class _GameBoardState extends State<GameBoard> {
     board[newRow][newCol] = selectedPiece;
     board[selectedRow][selectedCol] = null;
 
+    //check if piece double moved (actually not)
+    if (selectedPiece!.type == ChessPieceType.pawn && (newRow - selectedRow).abs() == 2) {
+      pawnJustdoubleMoved(newRow,newCol);
+    }
+
+    //check if the piece being moved is a pawn
+    if (selectedPiece!.type == ChessPieceType.pawn &&
+        (newRow == 0 || newRow == 7)) {
+      showPromotionDialog(newRow, newCol);
+    }
+
     //see if any kings are under attack
     if (isKingInCheck(!isWhiteTurn)) {
       checkStatus = true;
@@ -438,9 +481,91 @@ class _GameBoardState extends State<GameBoard> {
       selectedCol = -1;
       validMoves = [];
     });
-
+    //check if it's checkmate
+    if (isCheckMate(!isWhiteTurn)) {
+      showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: const Text('Checkmate!'),
+                content: Text(isWhiteTurn ? 'Black wins!' : 'White wins!'),
+                actions: [
+                  TextButton(
+                    onPressed: resetGame,
+                    child: const Text("Play again"),
+                  )
+                ],
+              ));
+    }
     //change turns
     isWhiteTurn = !isWhiteTurn;
+  }
+
+  void showPromotionDialog(int row, int col) {
+  showDialog(
+    context: context,
+    builder: (context) {
+      return AlertDialog(
+        title: const Text('Promote Pawn'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              title: const Text('Queen'),
+              onTap: () {
+                promotePawn(row, col, ChessPieceType.queen);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              title: const Text('Rook'),
+              onTap: () {
+                promotePawn(row, col, ChessPieceType.rook);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              title: const Text('Bishop'),
+              onTap: () {
+                promotePawn(row, col, ChessPieceType.bishop);
+                Navigator.pop(context);
+              },
+            ),
+            ListTile(
+              title: const Text('Knight'),
+              onTap: () {
+                promotePawn(row, col, ChessPieceType.knight);
+                Navigator.pop(context);
+              },
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+ List<int>? lastDoubleMovePawnPosition;
+  // bool to track if pawn just doublemoved to clear it after the next turn
+  bool pawnDoubleMoved = false;
+
+  void pawnJustdoubleMoved(row,col) {
+    lastDoubleMovePawnPosition = [row,col];
+    pawnDoubleMoved = true;
+  }
+
+  void promotePawn(int row, int col, ChessPieceType newType) {
+  setState(() {
+    board[row][col] = ChessPiece(
+      type: newType,
+      isWhite: board[row][col]!.isWhite,
+      imagePath: 'assets/images/${newType.toString().split('.').last}.png',
+    );
+
+    // Clear selection
+    selectedPiece = null;
+    selectedRow = -1;
+    selectedCol = -1;
+    validMoves = [];
+  });
   }
 
   //IS KING IN CHECK?
@@ -510,6 +635,43 @@ class _GameBoardState extends State<GameBoard> {
     return !kingInCheck;
   }
 
+  //IS IT CHECKMATE?
+  bool isCheckMate(bool isWhiteKing) {
+    // if the king is not in check, then is not checkmate
+    if (!isKingInCheck(isWhiteKing)) {
+      return false;
+    }
+    // if there is atleast one legal move for any of the player pieces, then its not checkmate
+    for (int i = 0; i < 8; i++) {
+      for (int j = 0; j < 8; j++) {
+        if (board[i][j] == null || board[i][j]!.isWhite != isWhiteKing) {
+          continue;
+        }
+        List<List<int>> pieceValidMoves =
+            calculatedRealValidMoves(i, j, board[i][j], true);
+
+        //if this piece has any valid moves, then its not checkmate
+        if (pieceValidMoves.isNotEmpty) {
+          return false;
+        }
+      }
+    }
+    //if no piece has any valid moves, then its checkmate
+    return true;
+  }
+
+  //RESET GAME
+  void resetGame() {
+    Navigator.pop(context);
+    _initializeBoard();
+    checkStatus = false;
+    whitePiecesTaken.clear();
+    blackPiecesTaken.clear();
+    blackKingPosition = [0, 4];
+    whiteKingPosition = [7, 4];
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -530,15 +692,21 @@ class _GameBoardState extends State<GameBoard> {
             )),
             //GAME STATUS
             checkStatus
-                ? Image.asset(
-                    'assets/images/check.png',
-                    color: whitePiececolor,
+                ? SizedBox(
+                    width: 128, // Set the desired width
+                    height: 64, // Set the desired height
+                    child: Image.asset(
+                      filterQuality: FilterQuality.none,
+                      'assets/images/check.png',
+                      color: whitePiececolor,
+                      fit: BoxFit.contain, // Adjust the fit property as needed
+                    ),
                   )
                 : Container(),
 
             //CHESS BOARD
             Expanded(
-              flex: 3,
+              flex: 4,
               child: GridView.builder(
                 itemCount: 64,
                 physics: const NeverScrollableScrollPhysics(),
