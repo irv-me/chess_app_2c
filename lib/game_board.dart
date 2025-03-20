@@ -45,6 +45,21 @@ class _GameBoardState extends State<GameBoard> {
   List<int> whiteKingPosition = [7, 4];
   List<int> blackKingPosition = [0, 4];
   bool checkStatus = false;
+ //bool pieces
+  bool whiteKingMoved = false;
+  bool blackKingMoved = false;
+  bool whiteRookAMoved = false;
+  bool whiteRookHMoved = false;
+  bool blackRookAMoved = false;
+  bool blackRookHMoved = false;
+
+  //castling bools
+  bool whiteCastlingAAvailable = false;
+  bool blackCastlingAAvailable = false;
+  bool whiteCastlingHAvailable = false;
+  bool blackCastlingHAvailable = false;
+
+
 
   @override
   void initState() {
@@ -221,7 +236,7 @@ class _GameBoardState extends State<GameBoard> {
           candidateMoves.add([row + direction, col + 1]);
         }
 
-        //TODO pawn can "En passant" allows a pawn to capture an adjacent enemy pawn that has just moved two squares forward, as if it had only moved one square. this can only be done the turn after
+        //pawn can "En passant" allows a pawn to capture an adjacent enemy pawn that has just moved two squares forward, as if it had only moved one square. this can only be done the turn after
         if (lastDoubleMovePawnPosition != null) {
         int lastRow = lastDoubleMovePawnPosition![0];
         int lastCol = lastDoubleMovePawnPosition![1];
@@ -377,6 +392,42 @@ class _GameBoardState extends State<GameBoard> {
           candidateMoves.add([newRow, newCol]);
         }
         //TODO castling
+        if (piece.isWhite) {
+          if (!whiteKingMoved && !whiteRookAMoved) {
+            if (board[7][1] == null && board[7][2] == null && board[7][3] == null) {
+              whiteCastlingAAvailable = true;
+            }
+            else {
+              whiteCastlingAAvailable = false;
+            }
+          }
+          if (!whiteKingMoved && !whiteRookHMoved) {
+            if (board[7][5] == null && board[7][6] == null) {
+              whiteCastlingHAvailable = true;
+            }
+            else {
+              whiteCastlingHAvailable = false;
+            }
+          }
+          if (!blackKingMoved && !blackRookAMoved) {
+            if (board[0][1] == null && board[0][2] == null && board[0][3] == null) {
+              blackCastlingAAvailable = true;
+            }
+            else {
+              blackCastlingAAvailable = false;
+            }
+          }
+          if (!blackKingMoved && !blackRookHMoved) {
+            if (board[0][5] == null && board[0][6] == null) {
+              blackCastlingHAvailable = true;
+            }
+            else {
+              blackCastlingHAvailable = false;
+            }
+          }
+
+        
+        }
 
         break;
     }
@@ -428,7 +479,7 @@ class _GameBoardState extends State<GameBoard> {
     // Handle en passant capture
     int lastRow = lastDoubleMovePawnPosition![0];
     int lastCol = lastDoubleMovePawnPosition![1];
-    if (newCol == lastCol && (newRow - lastRow).abs() == 1) {
+    if (selectedRow == lastRow && newCol == lastCol && (newRow - lastRow).abs() == 1) {
       var capturedPiece = board[lastRow][lastCol];
       if (capturedPiece!.isWhite) {
         whitePiecesTaken.add(capturedPiece);
@@ -439,18 +490,39 @@ class _GameBoardState extends State<GameBoard> {
     }
   }
 
-    
+   
 
 
     //check if the piece being moves is a king
     if (selectedPiece!.type == ChessPieceType.king) {
       //update the king's position
       if (selectedPiece!.isWhite) {
+        whiteKingMoved = true;
         whiteKingPosition = [newRow, newCol];
       } else {
+        blackKingMoved = true;
         blackKingPosition = [newRow, newCol];
       }
     }
+
+    //check if the piece being moved is a rook
+    if (selectedPiece!.type == ChessPieceType.rook) {
+      //update the rook's position
+      if (selectedPiece!.isWhite) {
+        if (selectedRow == 7 && selectedCol == 0) {
+          whiteRookAMoved = true;
+        } else if (selectedRow == 7 && selectedCol == 7) {
+          whiteRookHMoved = true;
+        }
+      } else {
+        if (selectedRow == 0 && selectedCol == 0) {
+          blackRookAMoved = true;
+        } else if (selectedRow == 0 && selectedCol == 7) {
+          blackRookHMoved = true;
+        }
+      }
+    }
+    
 
     //move the piece to the new position and clear the old spot
     board[newRow][newCol] = selectedPiece;
@@ -672,6 +744,63 @@ class _GameBoardState extends State<GameBoard> {
     setState(() {});
   }
 
+    // Perform White A-side castling
+  void performWhiteAcasling() {
+    setState(() {
+      board[7][2] = board[7][4]; // Move king
+      board[7][4] = null;
+      board[7][3] = board[7][0]; // Move rook
+      board[7][0] = null;
+      whiteKingMoved = true;
+      whiteRookAMoved = true;
+      whiteKingPosition = [7, 2];
+      isWhiteTurn = false;
+    });
+  }
+
+  // Perform White H-side castling
+  void performWhiteHcasling() {
+    setState(() {
+      board[7][6] = board[7][4]; // Move king
+      board[7][4] = null;
+      board[7][5] = board[7][7]; // Move rook
+      board[7][7] = null;
+      whiteKingMoved = true;
+      whiteRookHMoved = true;
+      whiteKingPosition = [7, 6];
+      isWhiteTurn = false;
+    });
+  }
+
+  // Perform Black A-side castling
+  void performBlackAcasling() {
+    setState(() {
+      board[0][2] = board[0][4]; // Move king
+      board[0][4] = null;
+      board[0][3] = board[0][0]; // Move rook
+      board[0][0] = null;
+      blackKingMoved = true;
+      blackRookAMoved = true;
+      blackKingPosition = [0, 2];
+      isWhiteTurn = true;
+    });
+  }
+
+  // Perform Black H-side castling
+  void performBlackHcasling() {
+    setState(() {
+      board[0][6] = board[0][4]; // Move king
+      board[0][4] = null;
+      board[0][5] = board[0][7]; // Move rook
+      board[0][7] = null;
+      blackKingMoved = true;
+      blackRookHMoved = true;
+      blackKingPosition = [0, 6];
+      isWhiteTurn = true;
+    });
+  }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -690,19 +819,67 @@ class _GameBoardState extends State<GameBoard> {
                 isWhite: true,
               ),
             )),
-            //GAME STATUS
-            checkStatus
-                ? SizedBox(
-                    width: 128, // Set the desired width
-                    height: 64, // Set the desired height
-                    child: Image.asset(
-                      filterQuality: FilterQuality.none,
-                      'assets/images/check.png',
-                      color: whitePiececolor,
-                      fit: BoxFit.contain, // Adjust the fit property as needed
-                    ),
-                  )
-                : Container(),
+            //perform castling buttons
+            whiteCastlingAAvailable && isWhiteTurn ? GestureDetector(
+              onTap: () {
+                performWhiteAcasling();
+              },
+              child: SizedBox(
+                width: 128, // Set the desired width
+                height: 64, // Set the desired height
+                child: Image.asset(
+                  'assets/images/0-0-0.png',
+                  filterQuality: FilterQuality.none,
+                  color: whitePiececolor,
+                  fit: BoxFit.contain, // Adjust the fit property as needed
+                ),
+              ),
+            ) : Container(),
+            whiteCastlingHAvailable && isWhiteTurn ? GestureDetector(
+              onTap: () {
+                performWhiteHcasling();
+              },
+              child: SizedBox(
+                width: 128, // Set the desired width
+                height: 64, // Set the desired height
+                child: Image.asset(
+                  'assets/images/0-0.png',
+                  filterQuality: FilterQuality.none,
+                  color: whitePiececolor,
+                  fit: BoxFit.contain, // Adjust the fit property as needed
+                ),
+              ),
+            ) : Container(),
+            blackCastlingAAvailable && !isWhiteTurn ? GestureDetector(
+              onTap: () {
+                performBlackAcasling();
+              },
+              child: SizedBox(
+                width: 128, // Set the desired width
+                height: 64, // Set the desired height
+                child: Image.asset(
+                  'assets/images/0-0-0.png',
+                  filterQuality: FilterQuality.none,
+                  color: blackPiececolor,
+                  fit: BoxFit.contain, // Adjust the fit property as needed
+                ),
+              ),
+            ) : Container(),
+            blackCastlingHAvailable && !isWhiteTurn ? GestureDetector(
+              onTap: () {
+                performBlackHcasling();
+              },
+              child: SizedBox(
+                width: 128, // Set the desired width
+                height: 64, // Set the desired height
+                child: Image.asset(
+                  'assets/images/0-0.png',
+                  filterQuality: FilterQuality.none,
+                  color: blackPiececolor,
+                  fit: BoxFit.contain, // Adjust the fit property as needed
+                ),
+              ),
+            ) : Container(),
 
             //CHESS BOARD
             Expanded(
