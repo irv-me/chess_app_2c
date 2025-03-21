@@ -499,11 +499,17 @@ class _GameBoardState extends State<GameBoard> {
       if (selectedPiece!.isWhite) {
         whiteKingMoved = true;
         whiteKingPosition = [newRow, newCol];
+        whiteCastlingAAvailable = false;
+        whiteCastlingHAvailable = false;
       } else {
         blackKingMoved = true;
         blackKingPosition = [newRow, newCol];
+        blackCastlingAAvailable = false;
+        blackCastlingHAvailable = false;
       }
     }
+  
+    
 
     //check if the piece being moved is a rook
     if (selectedPiece!.type == ChessPieceType.rook) {
@@ -753,6 +759,8 @@ class _GameBoardState extends State<GameBoard> {
       board[7][0] = null;
       whiteKingMoved = true;
       whiteRookAMoved = true;
+      whiteCastlingAAvailable = false;
+      whiteCastlingHAvailable = false;
       whiteKingPosition = [7, 2];
       isWhiteTurn = false;
     });
@@ -767,6 +775,9 @@ class _GameBoardState extends State<GameBoard> {
       board[7][7] = null;
       whiteKingMoved = true;
       whiteRookHMoved = true;
+      blackCastlingAAvailable = false;
+      blackCastlingHAvailable = false;
+      
       whiteKingPosition = [7, 6];
       isWhiteTurn = false;
     });
