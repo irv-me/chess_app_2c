@@ -775,8 +775,8 @@ class _GameBoardState extends State<GameBoard> {
       board[7][7] = null;
       whiteKingMoved = true;
       whiteRookHMoved = true;
-      blackCastlingAAvailable = false;
-      blackCastlingHAvailable = false;
+      whiteCastlingAAvailable = false;
+      whiteCastlingHAvailable = false;
       
       whiteKingPosition = [7, 6];
       isWhiteTurn = false;
@@ -792,6 +792,8 @@ class _GameBoardState extends State<GameBoard> {
       board[0][0] = null;
       blackKingMoved = true;
       blackRookAMoved = true;
+      blackCastlingAAvailable = false; // Disable castling
+      blackCastlingHAvailable = false;
       blackKingPosition = [0, 2];
       isWhiteTurn = true;
     });
@@ -806,6 +808,8 @@ class _GameBoardState extends State<GameBoard> {
       board[0][7] = null;
       blackKingMoved = true;
       blackRookHMoved = true;
+      blackCastlingAAvailable = false; // Disable castling
+      blackCastlingHAvailable = false;
       blackKingPosition = [0, 6];
       isWhiteTurn = true;
     });
@@ -818,6 +822,19 @@ class _GameBoardState extends State<GameBoard> {
         backgroundColor: blackSquarecolor,
         body: Column(
           children: [
+            //GAME STATUS
+            checkStatus
+                ? SizedBox(
+                    width: 128, // Set the desired width
+                    height: 64, // Set the desired height
+                    child: Image.asset(
+                      'assets/images/check.png',
+                      filterQuality: FilterQuality.none,
+                      color: whitePiececolor,
+                      fit: BoxFit.contain, // Adjust the fit property as needed
+                    ),
+                  )
+                : Container(),
             //WHITE PIECES TAKEN
             Expanded(
                 child: GridView.builder(
@@ -830,6 +847,7 @@ class _GameBoardState extends State<GameBoard> {
                 isWhite: true,
               ),
             )),
+
             //perform castling buttons
             whiteCastlingAAvailable && isWhiteTurn ? GestureDetector(
               onTap: () {
@@ -892,6 +910,7 @@ class _GameBoardState extends State<GameBoard> {
               ),
             ) : Container(),
 
+
             //CHESS BOARD
             Expanded(
               flex: 4,
@@ -939,7 +958,21 @@ class _GameBoardState extends State<GameBoard> {
                 imagePath: blackPiecesTaken[index].imagePath,
                 isWhite: false,
               ),
-            )),
+            
+             ),
+             ),
+            //Turn
+            if (isWhiteTurn) ... [
+              const Text(
+                'White\'s Turn',
+                style: TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ] else ... [
+              const Text(
+                'Black\'s Turn',
+                style: TextStyle(color: Colors.black, fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ],
           ],
         ));
   }
